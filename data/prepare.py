@@ -66,11 +66,25 @@ def get_examples(args):
         from data.synth import generate
         return generate(n, seed=0)
     if args.source == "modelscope":
-        import itertools
-        from modelscope.msdatasets import MsDataset
-        ds = MsDataset.load(args.dataset, split=args.split)
-        rows = [dict(r) for r in itertools.islice(iter(ds), n)]   # robust across versions
-        return _coerce_xlam(rows)
+        # MsDataset.load() hits a modelscope<->datasets version clash
+        # (as_dataset(verification_mode=...)). Bypass it: snapshot the repo and
+        # read the raw json directly.
+        import glob
+        import json as _json
+        try:
+            from modelscope import dataset_snapshot_download
+        except ImportError:
+            from modelscope.hub.snapshot_download import dataset_snapshot_download
+        d = dataset_snapshot_download(args.dataset)
+        cands = [p for p in glob.glob(os.path.join(d, "**", "*.json"), recursive=True)
+                 if os.path.basename(p) not in ("dataset_infos.json", "config.json")]
+        if not cands:
+            raise SystemExit(f"no data .json found under {d}")
+        path = max(cands, key=os.path.getsize)            # the actual data file
+        print("loading", path)
+        raw = _json.load(open(path))
+        rows = raw if isinstance(raw, list) else raw.get("data", list(raw))
+        return _coerce_xlam([dict(r) for r in rows[:n]])
     ds = load_dataset(args.dataset, split=args.split).select(range(min(n, 999999)))
     return _coerce_xlam([ds[i] for i in range(min(n, len(ds)))])
 
