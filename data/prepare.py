@@ -42,24 +42,44 @@ def _loads(x):
     return x if isinstance(x, (list, dict)) else json.loads(x)
 
 
+def _coerce_xlam(rows):
+    """Keep only rows that look like xlam schema (query/tools/answers); else raise
+    with the columns so we can adapt the parser to the dataset's real schema."""
+    if not rows:
+        raise SystemExit("dataset returned 0 rows")
+    cols = set(rows[0].keys())
+    if {"query", "tools", "answers"} <= cols:
+        return [{"query": e["query"], "tools": e["tools"], "answers": e["answers"]} for e in rows]
+    raise SystemExit(
+        f"Unrecognized schema. columns={sorted(cols)}\n"
+        f"sample row: {rows[0]}\n"
+        "-> paste this to me and I'll adapt prepare.py to it.")
+
+
 def get_examples(args):
     """Return a list of {query, tools, answers} from the chosen source.
-    'synthetic' (default): zero-dependency, no HF dataset / no gating / no login.
-    'hf': a HuggingFace function-calling dataset with xlam's schema (gated -> login)."""
+    'synthetic' (default): zero-dependency, no dataset / no gating / no login.
+    'modelscope': a ModelScope dataset (国内直连, 多数不门控) — pass its id via --dataset.
+    'hf': a HuggingFace function-calling dataset (xlam is gated -> login)."""
     n = args.n + args.n_val
     if args.source == "synthetic":
         from data.synth import generate
         return generate(n, seed=0)
+    if args.source == "modelscope":
+        from modelscope.msdatasets import MsDataset
+        ds = MsDataset.load(args.dataset, split=args.split)
+        rows = [ds[i] for i in range(min(n, len(ds)))]
+        return _coerce_xlam(rows)
     ds = load_dataset(args.dataset, split=args.split).select(range(min(n, 999999)))
-    return [{"query": e["query"], "tools": e["tools"], "answers": e["answers"]} for e in ds]
+    return _coerce_xlam([ds[i] for i in range(min(n, len(ds)))])
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", required=True, help="base model whose chat template to render with")
-    ap.add_argument("--source", default="synthetic", choices=["synthetic", "hf"])
+    ap.add_argument("--source", default="synthetic", choices=["synthetic", "modelscope", "hf"])
     ap.add_argument("--dataset", default="Salesforce/xlam-function-calling-60k",
-                    help="HF dataset (only when --source hf)")
+                    help="dataset id (for --source modelscope or hf)")
     ap.add_argument("--split", default="train")
     ap.add_argument("--out", default="data/sft_train.jsonl")
     ap.add_argument("--val_out", default="data/sft_val.jsonl")
