@@ -3,7 +3,9 @@
 A T4 is enough for the 1.5B baseline (bf16 ~3-4 GB). For fine-tuning later, use
 an A100/L4.
 
-### Cell 0 — setup (re-run after any disconnect)
+### Cell 0 — setup (RUN THIS AFTER EVERY runtime reset)
+A Colab runtime reset wipes `/content` **and** all pip-installed packages, so this
+re-establishes everything. Only `/content/drive` (models, data, adapters) persists.
 ```python
 import os
 %cd /content
@@ -11,10 +13,14 @@ if not os.path.isdir('/content/tool-agent-lab'):
     !git clone https://github.com/honda19850705609-cpu/tool-agent-lab.git
 %cd /content/tool-agent-lab
 !git pull -q
-!pip -q install -r requirements.txt
+!pip -q install -r requirements.txt          # transformers/peft/trl/datasets/modelscope/...
+!pip -q uninstall -y torchao                 # fixes peft LoRA torchao-version ImportError
+from google.colab import drive; drive.mount('/content/drive')
+BASE = "/content/drive/MyDrive/Model/tool-agent-lab/Qwen2.5-7B-Instruct"
+D    = "/content/drive/MyDrive/Model/tool-agent-lab"   # data + adapters live here (persist)
 import torch
-print("torch", torch.__version__, "| GPU:",
-      torch.cuda.get_device_name(0) if torch.cuda.is_available() else "CPU")
+print("✅ GPU:", torch.cuda.get_device_name(0) if torch.cuda.is_available() else "CPU",
+      "| BASE exists:", os.path.isdir(BASE))
 ```
 
 ### Cell 1 — functional baseline (works out of the box)

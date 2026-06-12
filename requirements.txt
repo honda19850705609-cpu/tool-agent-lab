@@ -8,3 +8,8 @@ trl>=0.11
 datasets
 # quantized loading (optional, for low-VRAM)
 bitsandbytes
+# domestic (China-direct) dataset/model hub + its deps
+modelscope
+addict
+simplejson
+sortedcontainers
