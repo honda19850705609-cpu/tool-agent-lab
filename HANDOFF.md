@@ -39,18 +39,25 @@ capable base + measure rigorously**. Runs on **Colab Pro+** (A100/H100/L4, high-
   **Qwen2.5-VL-7B-Instruct**), `sft_train.jsonl` (20k), `sft_val.jsonl` (500), adapters `sft-qwen7b`, `sft-qwen1.5b`.
 - SFT data = **AI-ModelScope/xlam-function-calling-60k** via `--source modelscope` (China-direct, ungated).
 
-## NEXT STEP (decided): multimodal — small-object detect/describe/classify
-Fine-tune **Qwen2.5-VL-7B-Instruct** (already downloaded to Drive) on **VisDrone** for
-small-object **detection + description + classification** (ties to the user's VisDrone VLM
-auto-annotator work).
-- Use **ms-swift** (`pip install ms-swift`, ModelScope-native, turnkey Qwen2.5-VL LoRA) — do NOT
-  rewrite VLM training from scratch. `swift sft --model <VL> --train_type lora --freeze_vit true
-  --max_pixels <high, for small objects> --dataset <visdrone-grounding> ...`.
-- **Honest caveat**: small-object *localization* is the VLM's weak spot (downsampling). Mitigate
-  with high `--max_pixels`, or hybrid (real detector for boxes → VLM describes/classifies crops).
-- **OPEN QUESTIONS to resolve next conversation:**
-  1. VisDrone data: format (raw txt / COCO json) + Drive location → write the converter to ms-swift grounding format.
-  2. Task form: end-to-end (VLM outputs boxes+class+desc) vs hybrid (boxes given → VLM describes/classifies).
+## NEXT STEP (active): DPO on top of SFT — the alignment ladder
+The multimodal/VisDrone-VL detour was **dropped** (2026-06-13) to stay on the core LLM
+line. The mainline is SFT → **DPO** → (data recipes / OOD): keep advancing the tool-calling
+model's capability/alignment.
+
+SFT's gain sits in **argument accuracy** with a ceiling; DPO trains the model to prefer the
+gold call over a plausible-but-wrong one. Code is in place (all on `main`):
+- `data/build_prefs.py` — {prompt, chosen, rejected}. `--mode sampled` (recommended, on-policy:
+  sample from the SFT model, keep its OWN wrong calls as rejected — prefers right-name/wrong-args)
+  or `--mode synthetic` (zero-dep fallback: perturb gold args). Negatives target arguments.
+- `train/dpo_lora.py` — TRL DPOTrainer; merges SFT into the weights so the **SFT model is both
+  the DPO init and the frozen reference** (ref_model=None + peft_config), DPO learns a new LoRA.
+- `eval/eval_toolcall.py` — added `--merge_adapter` (bake SFT in) so base / SFT / SFT+DPO are
+  scored on the same val set. `COLAB.md` steps 6–9 run the whole loop.
+- Smoke-tested the synthetic-negative logic locally (hard negatives: unit swaps, dropped params,
+  off-by-N values; all parseable, differ only in args). `sampled`/DPO run on Colab (GPU+trl).
+- **Research question**: does DPO lift exact_acc above SFT, and is the lift in *argument*
+  accuracy? Watch over-optimization (too-high LR / too-low --beta can drop json_valid).
+- **TODO next run**: build prefs (`--mode sampled`, 1.5B and 7B) → DPO → 3-stage eval table.
 
 ## Colab/Drive gotchas (these cost hours — heed them)
 - Runtime reset wipes BOTH `/content` AND pip-installed packages → re-run Cell 0 (reinstall + remount).

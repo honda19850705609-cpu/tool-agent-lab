@@ -1,6 +1,6 @@
 # 🧠 项目交接记忆 · tool-agent-lab(中文)
 
-> 换对话时把这份发给我,或直接说"继续 tool-agent-lab,看 HANDOFF / HANDOFF.zh,下一步 VL+VisDrone"。
+> 换对话时把这份发给我,或直接说"继续 tool-agent-lab,看 HANDOFF / HANDOFF.zh,下一步 SFT→DPO"。
 
 ## 一、背景与目标
 - **上一个项目** `tiny-llm-quant-ablation`(已完结):从零造小 LLM 做量化消融,核心发现"**量化代价在能力边缘才出现**";并亲历"单卡从零训练 = 玩具"的规模墙。
@@ -29,11 +29,16 @@
 - 数据:`sft_train.jsonl`(20k)、`sft_val.jsonl`(500);adapter:`sft-qwen7b`、`sft-qwen1.5b`
 - SFT 数据源:`AI-ModelScope/xlam-function-calling-60k`(`--source modelscope`,国内直连不门控)
 
-## 五、下一步(已定):多模态 · 小目标
-- 把 **Qwen2.5-VL-7B** 在 **VisDrone** 上微调,做**小目标 检测+描述+分类**(接用户的 VisDrone VLM 自动标注线)。
-- 用 **ms-swift**(魔搭官方,turnkey Qwen2.5-VL LoRA,国内直连)——**不要自己写 VLM 训练代码**。关键参数:`--train_type lora --freeze_vit true --max_pixels <调高,小目标关键>`。
-- **诚实提醒**:小目标**定位**是 VLM 弱项(降采样)→ 高分辨率缓解,或**混合**(专用检测器出框 → VLM 描述/分类 crop)。
-- **待确认**:① VisDrone 数据格式(原始 txt / COCO json)+ Drive 路径;② 任务形式(端到端 vs 混合)。
+## 五、下一步(进行中):SFT 之上加 DPO · 对齐梯子
+**多模态/VisDrone-VL 那条线已放弃(2026-06-13)**,回归核心 LLM 主线。主线 = SFT → **DPO** →(数据配方 / OOD 泛化),继续精进工具调用模型的能力/对齐。
+
+SFT 的增益集中在**参数准确率**且有天花板;DPO 训模型在"金标调用 vs 似是而非的错误调用"里选金标。代码已就位(都在 `main`):
+- `data/build_prefs.py` —— 产 {prompt, chosen, rejected}。`--mode sampled`(**推荐**,on-policy:从 SFT 模型采样,留它**自己的错误**当 rejected,优先"工具名对/参数错"的硬负例)或 `--mode synthetic`(零依赖兜底:扰动金标参数)。**负例专打参数**。
+- `train/dpo_lora.py` —— TRL DPOTrainer;把 SFT 合进权重,于是 **SFT 模型既是 DPO 起点又是冻结参考**(ref_model=None + peft_config),DPO 学一个新 LoRA。
+- `eval/eval_toolcall.py` —— 加了 `--merge_adapter`(先把 SFT 烤进权重),于是 base / SFT / SFT+DPO 在同一验证集上同口径对比。`COLAB.md` 第 6–9 步跑完整闭环。
+- 本地用 stub 烟测过 synthetic 负例逻辑(硬负例:单位互换、丢参、数值偏移;全部可解析、只在参数上不同)。`sampled`/DPO 需在 Colab 跑(GPU+trl)。
+- **研究问题**:DPO 能否把 exact_acc 顶过 SFT?增益是不是落在**参数准确率**?注意过优化(LR 太高 / `--beta` 太低会把 json_valid 拉崩)。
+- **下次开跑**:建偏好对(`--mode sampled`,1.5B 和 7B)→ DPO → 出三段式对比表。
 
 ## 六、Colab/Drive 关键坑(切记)
 - 运行时重置会清空 **/content + pip 包** → 重跑 Cell 0(重装 + 重挂 Drive);只有 **/content/drive 持久**。

@@ -7,11 +7,16 @@ the predicted tool call(s), and compare to gold along three axes:
   - name_acc   : did it call the right tool name(s)? (set match)
   - exact_acc  : right name(s) AND exact arguments (the strict metric)
 
-Compare a base model vs a LoRA fine-tune by passing --adapter.
+Compare a base model vs a LoRA fine-tune by passing --adapter. To evaluate an
+adapter trained *on top of* another (e.g. DPO on top of SFT), bake the lower one
+in first with --merge_adapter; the same val set + metric then compares all three
+stages (base / SFT / SFT+DPO) apples-to-apples.
 
 Run:
   python -m eval.eval_toolcall --model <base> --data data/sft_val.jsonl
   python -m eval.eval_toolcall --model <base> --adapter outputs/sft-qwen7b --data data/sft_val.jsonl
+  python -m eval.eval_toolcall --model <base> --merge_adapter outputs/sft-qwen7b \
+      --adapter outputs/dpo-qwen7b --data data/sft_val.jsonl
 """
 
 import argparse
@@ -37,7 +42,10 @@ def _norm(calls):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", required=True)
-    ap.add_argument("--adapter", default=None, help="LoRA adapter dir (omit for base)")
+    ap.add_argument("--adapter", default=None, help="LoRA adapter dir to evaluate (omit for base)")
+    ap.add_argument("--merge_adapter", default=None,
+                    help="LoRA adapter to bake into the weights BEFORE loading --adapter "
+                         "(e.g. the SFT adapter, when evaluating a DPO adapter trained on it)")
     ap.add_argument("--data", default="data/sft_val.jsonl")
     ap.add_argument("--n", type=int, default=300)
     ap.add_argument("--max_new", type=int, default=256)
@@ -46,6 +54,9 @@ def main():
     tok = AutoTokenizer.from_pretrained(args.model)
     model = AutoModelForCausalLM.from_pretrained(
         args.model, torch_dtype=torch.bfloat16, device_map="auto")
+    if args.merge_adapter:
+        from peft import PeftModel
+        model = PeftModel.from_pretrained(model, args.merge_adapter).merge_and_unload()
     if args.adapter:
         from peft import PeftModel
         model = PeftModel.from_pretrained(model, args.adapter)
@@ -68,7 +79,7 @@ def main():
         name_ok += int([p[0] for p in pred] == [g[0] for g in gold])
         exact_ok += int(pred == gold)
 
-    print(f"model={args.model} adapter={args.adapter} n={n}")
+    print(f"model={args.model} merge_adapter={args.merge_adapter} adapter={args.adapter} n={n}")
     print(f"  json_valid : {json_valid/n:.3f}   (emitted a parseable tool call)")
     print(f"  name_acc   : {name_ok/n:.3f}   (right tool name(s))")
     print(f"  exact_acc  : {exact_ok/n:.3f}   (right name(s) + exact arguments)")

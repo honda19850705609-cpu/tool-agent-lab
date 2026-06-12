@@ -71,4 +71,47 @@ agent.run("What is 47 * 89, and what's the weather in Tokyo?")
 ```
 
 Save `outputs/` to Drive if you want to keep the adapter (it's small, ~tens of MB).
-Then iterate the research: data quantity/quality, then DPO (see README).
+
+### DPO on top of SFT (the alignment ladder)
+
+SFT's gain is concentrated in **argument accuracy**, and there's a ceiling. DPO
+trains the model to prefer the gold tool call over a plausible-but-wrong one,
+pushing argument/exact accuracy past SFT. The negatives target arguments — the
+real failure mode. Needs the SFT adapter from above. An A100/L4 is recommended.
+
+```python
+# 6) build preference pairs. RECOMMENDED: on-policy — sample from the SFT model
+#    and keep its OWN mistakes as the 'rejected' (this is what moves the metric).
+!python -m data.build_prefs --mode sampled \
+    --model {BASE} --sft_adapter outputs/sft-qwen7b \
+    --data data/sft_train.jsonl --out data/dpo_train.jsonl --n 3000 --k 4
+# (the SFT model is already correct on easy prompts -> those are dropped; add
+#  --fallback_synthetic to backfill them with a synthetic negative instead.)
+# zero-GPU fallback (off-policy, weaker signal — for smoke-testing the pipeline):
+#   !python -m data.build_prefs --mode synthetic --data data/sft_train.jsonl \
+#       --out data/dpo_train.jsonl --n 3000
+
+# 7) DPO — learns a NEW LoRA on top of the SFT-merged model (SFT = the reference)
+!python -m train.dpo_lora --model {BASE} --sft_adapter outputs/sft-qwen7b \
+    --data data/dpo_train.jsonl --out_dir outputs/dpo-qwen7b \
+    --epochs 1 --batch_size 2 --grad_accum 8 --lr 5e-6 --beta 0.1
+
+# 8) measure all three stages on the SAME held-out set (base / SFT / SFT+DPO)
+!python -m eval.eval_toolcall --model {BASE} --data data/sft_val.jsonl --n 300
+!python -m eval.eval_toolcall --model {BASE} --adapter outputs/sft-qwen7b --data data/sft_val.jsonl --n 300
+!python -m eval.eval_toolcall --model {BASE} --merge_adapter outputs/sft-qwen7b \
+    --adapter outputs/dpo-qwen7b --data data/sft_val.jsonl --n 300
+```
+```python
+# 9) run the DPO'd agent live (SFT baked in, DPO on top)
+from peft import PeftModel
+from agent.runtime import Agent
+agent = Agent(BASE, adapter="outputs/sft-qwen7b")          # SFT loaded
+agent.model = PeftModel.from_pretrained(agent.model.merge_and_unload(), "outputs/dpo-qwen7b")
+agent.run("What is 47 * 89, and what's the weather in Tokyo?")
+```
+
+The research question: does DPO lift **exact_acc** above SFT, and is the lift in
+argument accuracy (name_acc was already near-ceiling)? Cp Drive to keep both
+adapters. Watch for over-optimization — too-high LR or too-low `--beta` can make
+DPO chase the preference and *drop* json_valid; if so, lower LR / raise beta.
