@@ -42,10 +42,24 @@ def _loads(x):
     return x if isinstance(x, (list, dict)) else json.loads(x)
 
 
+def get_examples(args):
+    """Return a list of {query, tools, answers} from the chosen source.
+    'synthetic' (default): zero-dependency, no HF dataset / no gating / no login.
+    'hf': a HuggingFace function-calling dataset with xlam's schema (gated -> login)."""
+    n = args.n + args.n_val
+    if args.source == "synthetic":
+        from data.synth import generate
+        return generate(n, seed=0)
+    ds = load_dataset(args.dataset, split=args.split).select(range(min(n, 999999)))
+    return [{"query": e["query"], "tools": e["tools"], "answers": e["answers"]} for e in ds]
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", required=True, help="base model whose chat template to render with")
-    ap.add_argument("--dataset", default="Salesforce/xlam-function-calling-60k")
+    ap.add_argument("--source", default="synthetic", choices=["synthetic", "hf"])
+    ap.add_argument("--dataset", default="Salesforce/xlam-function-calling-60k",
+                    help="HF dataset (only when --source hf)")
     ap.add_argument("--split", default="train")
     ap.add_argument("--out", default="data/sft_train.jsonl")
     ap.add_argument("--val_out", default="data/sft_val.jsonl")
@@ -56,12 +70,10 @@ def main():
 
     os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
     tok = AutoTokenizer.from_pretrained(args.model)
-    ds = load_dataset(args.dataset, split=args.split)
-    n = min(args.n + args.n_val, len(ds))
-    ds = ds.select(range(n))
+    examples = get_examples(args)
 
     rows, skipped = [], 0
-    for ex in ds:
+    for ex in examples:
         try:
             tools = _loads(ex["tools"])
             answers = _loads(ex["answers"])
