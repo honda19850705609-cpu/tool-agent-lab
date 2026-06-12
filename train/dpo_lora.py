@@ -66,7 +66,11 @@ def main():
                         "gate_proj", "up_proj", "down_proj"],
     )
 
-    dpo_config = DPOConfig(
+    # DPOConfig's fields drift across TRL versions (e.g. max_prompt_length was
+    # removed/renamed in some). Pass only what THIS installed version accepts,
+    # and print whatever we drop so truncation behavior stays visible.
+    import dataclasses
+    wanted = dict(
         output_dir=args.out_dir,
         num_train_epochs=args.epochs,
         per_device_train_batch_size=args.batch_size,
@@ -83,6 +87,11 @@ def main():
         gradient_checkpointing=True,
         report_to="none",
     )
+    valid = {f.name for f in dataclasses.fields(DPOConfig)}
+    dropped = [k for k in wanted if k not in valid]
+    if dropped:
+        print("note: this TRL's DPOConfig doesn't accept", dropped, "-> skipping")
+    dpo_config = DPOConfig(**{k: v for k, v in wanted.items() if k in valid})
 
     trainer = DPOTrainer(
         model=model,
