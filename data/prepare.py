@@ -66,9 +66,10 @@ def get_examples(args):
         from data.synth import generate
         return generate(n, seed=0)
     if args.source == "modelscope":
+        import itertools
         from modelscope.msdatasets import MsDataset
         ds = MsDataset.load(args.dataset, split=args.split)
-        rows = [ds[i] for i in range(min(n, len(ds)))]
+        rows = [dict(r) for r in itertools.islice(iter(ds), n)]   # robust across versions
         return _coerce_xlam(rows)
     ds = load_dataset(args.dataset, split=args.split).select(range(min(n, 999999)))
     return _coerce_xlam([ds[i] for i in range(min(n, len(ds)))])
