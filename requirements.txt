@@ -1,0 +1,10 @@
+# core
+torch
+transformers>=4.45
+accelerate
+# fine-tuning
+peft
+trl>=0.11
+datasets
+# quantized loading (optional, for low-VRAM)
+bitsandbytes

@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints/
+*.pt
+*.bin
+*.safetensors
+outputs/
+ckpt*/
+wandb/
+.DS_Store
+data/*.jsonl
