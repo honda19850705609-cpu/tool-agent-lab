@@ -79,35 +79,40 @@ trains the model to prefer the gold tool call over a plausible-but-wrong one,
 pushing argument/exact accuracy past SFT. The negatives target arguments — the
 real failure mode. Needs the SFT adapter from above. An A100/L4 is recommended.
 
+**Paths are anchored to Drive (`D`), not local `data/`/`outputs/`** — DPO is
+usually a fresh session, and a runtime reset wipes `/content`. So `sft_train.jsonl`,
+`sft_val.jsonl`, the SFT adapter, and DPO outputs all live under `D`. Confirm the
+names first (`!ls {D}` — the SFT adapter may be `{D}/sft-qwen7b` or `{D}/outputs/...`).
+
 ```python
 # 6) build preference pairs. RECOMMENDED: on-policy — sample from the SFT model
 #    and keep its OWN mistakes as the 'rejected' (this is what moves the metric).
 !python -m data.build_prefs --mode sampled \
-    --model {BASE} --sft_adapter outputs/sft-qwen7b \
-    --data data/sft_train.jsonl --out data/dpo_train.jsonl --n 3000 --k 4
+    --model {BASE} --sft_adapter {D}/sft-qwen7b \
+    --data {D}/sft_train.jsonl --out {D}/dpo_train.jsonl --n 3000 --k 4
 # (the SFT model is already correct on easy prompts -> those are dropped; add
 #  --fallback_synthetic to backfill them with a synthetic negative instead.)
 # zero-GPU fallback (off-policy, weaker signal — for smoke-testing the pipeline):
-#   !python -m data.build_prefs --mode synthetic --data data/sft_train.jsonl \
-#       --out data/dpo_train.jsonl --n 3000
+#   !python -m data.build_prefs --mode synthetic --data {D}/sft_train.jsonl \
+#       --out {D}/dpo_train.jsonl --n 3000
 
 # 7) DPO — learns a NEW LoRA on top of the SFT-merged model (SFT = the reference)
-!python -m train.dpo_lora --model {BASE} --sft_adapter outputs/sft-qwen7b \
-    --data data/dpo_train.jsonl --out_dir outputs/dpo-qwen7b \
+!python -m train.dpo_lora --model {BASE} --sft_adapter {D}/sft-qwen7b \
+    --data {D}/dpo_train.jsonl --out_dir {D}/dpo-qwen7b \
     --epochs 1 --batch_size 2 --grad_accum 8 --lr 5e-6 --beta 0.1
 
 # 8) measure all three stages on the SAME held-out set (base / SFT / SFT+DPO)
-!python -m eval.eval_toolcall --model {BASE} --data data/sft_val.jsonl --n 300
-!python -m eval.eval_toolcall --model {BASE} --adapter outputs/sft-qwen7b --data data/sft_val.jsonl --n 300
-!python -m eval.eval_toolcall --model {BASE} --merge_adapter outputs/sft-qwen7b \
-    --adapter outputs/dpo-qwen7b --data data/sft_val.jsonl --n 300
+!python -m eval.eval_toolcall --model {BASE} --data {D}/sft_val.jsonl --n 300
+!python -m eval.eval_toolcall --model {BASE} --adapter {D}/sft-qwen7b --data {D}/sft_val.jsonl --n 300
+!python -m eval.eval_toolcall --model {BASE} --merge_adapter {D}/sft-qwen7b \
+    --adapter {D}/dpo-qwen7b --data {D}/sft_val.jsonl --n 300
 ```
 ```python
 # 9) run the DPO'd agent live (SFT baked in, DPO on top)
 from peft import PeftModel
 from agent.runtime import Agent
-agent = Agent(BASE, adapter="outputs/sft-qwen7b")          # SFT loaded
-agent.model = PeftModel.from_pretrained(agent.model.merge_and_unload(), "outputs/dpo-qwen7b")
+agent = Agent(BASE, adapter=f"{D}/sft-qwen7b")             # SFT loaded
+agent.model = PeftModel.from_pretrained(agent.model.merge_and_unload(), f"{D}/dpo-qwen7b")
 agent.run("What is 47 * 89, and what's the weather in Tokyo?")
 ```
 
