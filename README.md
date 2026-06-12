@@ -61,11 +61,21 @@ agent = Agent("Qwen/Qwen2.5-1.5B-Instruct")
 agent.run("What is 47 * 89, and what's the weather in Tokyo?")
 ```
 
+## Pipeline
+
+```
+data/prepare.py   xlam function-calling -> {prompt, completion} SFT data
+train/sft_lora.py  LoRA SFT (completion-only) on a base model -> adapter
+eval/eval_toolcall.py  held-out tool-call accuracy: json_valid / name_acc / exact_acc
+agent/runtime.py   Agent(base, adapter=...) runs the fine-tune in the live loop
+```
+
 ## Status
 
 - [x] Tool registry + agent loop (functional baseline on an off-the-shelf model)
-- [ ] Function-calling SFT data pipeline
-- [ ] LoRA SFT + tool-call eval harness
+- [x] Function-calling SFT data pipeline (`data/prepare.py`)
+- [x] LoRA SFT (`train/sft_lora.py`) + tool-call eval harness (`eval/eval_toolcall.py`)
+- [ ] First result: base vs SFT tool-call accuracy
 - [ ] Data-recipe and DPO ablations
 
 ## License
