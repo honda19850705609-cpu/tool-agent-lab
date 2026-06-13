@@ -49,6 +49,8 @@ def main():
     ap.add_argument("--data", default="data/sft_val.jsonl")
     ap.add_argument("--n", type=int, default=300)
     ap.add_argument("--max_new", type=int, default=256)
+    ap.add_argument("--show_errors", type=int, default=0,
+                    help="print the first N mismatches (gold vs pred) for error analysis")
     args = ap.parse_args()
 
     tok = AutoTokenizer.from_pretrained(args.model)
@@ -68,6 +70,7 @@ def main():
     _MISS = object()                              # sentinel: a missing key != any value
     json_valid = name_ok = exact_ok = 0
     arg_match = arg_total = 0
+    mismatches = []
     for i in range(n):
         prompt, gold_text = ds[i]["prompt"], ds[i]["completion"]
         gold_calls = parse_tool_calls(gold_text)
@@ -82,6 +85,9 @@ def main():
         json_valid += int(len(pred) > 0)
         name_ok += int([p[0] for p in pred] == [g[0] for g in gold])
         exact_ok += int(pred == gold)
+
+        if args.show_errors and pred != gold and len(mismatches) < args.show_errors:
+            mismatches.append((i, gold_calls, pred_calls))
 
         # argument-level recall on single-call, right-name examples — finer than
         # whole-call exact match (decomposes the exact_acc gap; catches a fix to
@@ -100,6 +106,9 @@ def main():
     print(f"  exact_acc  : {exact_ok/n:.3f}   (right name(s) + exact arguments)")
     print(f"  arg_acc    : {arg_match/max(arg_total,1):.3f}   "
           f"(gold arg key-values exactly right; single-call right-name; n_args={arg_total})")
+    for i, g, p in mismatches:
+        print(f"\n[{i}] gold: {[{c['name']: c.get('arguments', {})} for c in g]}")
+        print(f"     pred: {[{c['name']: c.get('arguments', {})} for c in p] or p}")
 
 
 if __name__ == "__main__":
