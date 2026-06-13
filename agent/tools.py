@@ -52,6 +52,10 @@ _WEATHER = {
     "tokyo": {"temp_c": 22, "condition": "sunny"},
     "new york": {"temp_c": 18, "condition": "rainy"},
     "beijing": {"temp_c": 25, "condition": "clear"},
+    "paris": {"temp_c": 16, "condition": "cloudy"},
+    "berlin": {"temp_c": 12, "condition": "drizzle"},
+    "cairo": {"temp_c": 30, "condition": "sunny"},
+    "sydney": {"temp_c": 20, "condition": "windy"},
 }
 
 

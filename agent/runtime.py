@@ -44,12 +44,15 @@ def parse_tool_calls(text: str):
 
 class Agent:
     def __init__(self, model_name=DEFAULT_MODEL, device=None, adapter=None,
-                 dtype=torch.bfloat16):
+                 merge_adapter=None, dtype=torch.bfloat16):
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
         self.model = AutoModelForCausalLM.from_pretrained(
             model_name, torch_dtype=dtype, device_map=self.device)
-        if adapter:                                    # load a LoRA fine-tune
+        if merge_adapter:                              # bake in a lower adapter (e.g. SFT) first
+            from peft import PeftModel
+            self.model = PeftModel.from_pretrained(self.model, merge_adapter).merge_and_unload()
+        if adapter:                                    # load a LoRA fine-tune on top
             from peft import PeftModel
             self.model = PeftModel.from_pretrained(self.model, adapter)
         self.model.eval()

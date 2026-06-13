@@ -120,3 +120,29 @@ The research question: does DPO lift **exact_acc** above SFT, and is the lift in
 argument accuracy (name_acc was already near-ceiling)? Cp Drive to keep both
 adapters. Watch for over-optimization — too-high LR or too-low `--beta` can make
 DPO chase the preference and *drop* json_valid; if so, lower LR / raise beta.
+
+### Multi-step agent eval (executable task-success, not string-match)
+
+Single-call exact-match saturates AND mismeasures (it scores valid re-
+serializations as wrong — see the OOD result). The honest metric is EXECUTION:
+run the real agent loop, let it call the real tools, and check whether the task
+got solved. Multi-step tasks (anchored on get_weather's unguessable fixed data,
+so the model must actually chain tool calls) also expose the p^N compounding that
+single-call accuracy hides. No training needed — this evaluates the same adapters.
+
+```python
+# 10) build multi-step tasks with executable ground truth (balanced over 1/2/3 steps)
+!python -m data.tasks_multistep --out {D}/multistep_eval.jsonl --n 180
+
+# 11) executable agent eval — base / SFT / SFT+DPO. SLOWER than eval_toolcall
+#     (each task is up to 5 generations); start with --n 90 (~15-20 min each), scale up.
+!python -m eval.eval_agent --model {BASE} --data {D}/multistep_eval.jsonl --n 90
+!python -m eval.eval_agent --model {BASE} --adapter {D}/sft-qwen7b --data {D}/multistep_eval.jsonl --n 90
+!python -m eval.eval_agent --model {BASE} --merge_adapter {D}/sft-qwen7b \
+    --adapter {D}/dpo-qwen7b --data {D}/multistep_eval.jsonl --n 90
+```
+
+Reads: `task_success` overall + a breakdown by `n_steps`. The questions — does
+SFT's per-call edge **compound** into bigger end-to-end gains (or wash out)? How
+steep is the success drop from 1→2→3 steps (the reliability wall)? Does DPO matter
+once we score by execution instead of string-match?
