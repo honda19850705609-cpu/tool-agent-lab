@@ -39,25 +39,49 @@ capable base + measure rigorously**. Runs on **Colab Pro+** (A100/H100/L4, high-
   **Qwen2.5-VL-7B-Instruct**), `sft_train.jsonl` (20k), `sft_val.jsonl` (500), adapters `sft-qwen7b`, `sft-qwen1.5b`.
 - SFT data = **AI-ModelScope/xlam-function-calling-60k** via `--source modelscope` (China-direct, ungated).
 
-## NEXT STEP (active): DPO on top of SFT — the alignment ladder
-The multimodal/VisDrone-VL detour was **dropped** (2026-06-13) to stay on the core LLM
-line. The mainline is SFT → **DPO** → (data recipes / OOD): keep advancing the tool-calling
-model's capability/alignment.
+## RESULTS — a 3-finding capability arc (2026-06-13)
+(The multimodal/VisDrone-VL detour was dropped to stay on the core LLM line.) We pushed the
+tool-calling line from single-call → OOD → multi-step agent, and the threads connect into one
+story about **what SFT actually buys**.
 
-SFT's gain sits in **argument accuracy** with a ceiling; DPO trains the model to prefer the
-gold call over a plausible-but-wrong one. Code is in place (all on `main`):
-- `data/build_prefs.py` — {prompt, chosen, rejected}. `--mode sampled` (recommended, on-policy:
-  sample from the SFT model, keep its OWN wrong calls as rejected — prefers right-name/wrong-args)
-  or `--mode synthetic` (zero-dep fallback: perturb gold args). Negatives target arguments.
-- `train/dpo_lora.py` — TRL DPOTrainer; merges SFT into the weights so the **SFT model is both
-  the DPO init and the frozen reference** (ref_model=None + peft_config), DPO learns a new LoRA.
-- `eval/eval_toolcall.py` — added `--merge_adapter` (bake SFT in) so base / SFT / SFT+DPO are
-  scored on the same val set. `COLAB.md` steps 6–9 run the whole loop.
-- Smoke-tested the synthetic-negative logic locally (hard negatives: unit swaps, dropped params,
-  off-by-N values; all parseable, differ only in args). `sampled`/DPO run on Colab (GPU+trl).
-- **Research question**: does DPO lift exact_acc above SFT, and is the lift in *argument*
-  accuracy? Watch over-optimization (too-high LR / too-low --beta can drop json_valid).
-- **TODO next run**: build prefs (`--mode sampled`, 1.5B and 7B) → DPO → 3-stage eval table.
+### Finding 1 — DPO on top of SFT: marginal, because the single-call task is saturated
+Built the DPO loop (`data/build_prefs.py` on-policy/synthetic preference pairs; `train/dpo_lora.py`
+TRL DPO with the SFT model as both init and frozen reference; `eval/eval_toolcall.py --merge_adapter`).
+Result (7B, n=300): exact_acc **0.883 → 0.890 (+0.7pt, within noise)**, all in arguments. Lesson:
+single-call xlam is ~saturated (≈0.88), so it can't measure technique gains. *Reasons DPO looks flat:*
+greedy-decode eval mutes a distribution-reshaping method; only 542 on-policy pairs (SFT already
+correct on 82% of prompts); 500-example val floor.
+
+### Finding 2 — OOD generalization: SFT's transferable gain is RELIABILITY, not arguments
+Eval base/SFT/DPO on a synthetic 8-tool zoo (unseen tools). SFT *appears* to drop OOD exact_acc
+(0.933→0.820), but `--show_errors` shows **20/20 mismatches are cosmetic re-serialization**
+(`Japanese`→`ja`, `3pm`→`15:00`) — not wrong values. Decomposed: SFT **improved & transferred
+tool-SELECTION + format reliability** (name/json → 1.0 OOD), while "argument regression" is just a
+convention shift. Takeaway: exact-match partly measures convention-conformance, not capability → use
+**execution-based** eval. Added `arg_acc` to eval to see this.
+
+### Finding 3 (capstone) — multi-step agent: that reliability COMPOUNDS, and a tuned 7B matches frontier
+Built an execution-scored multi-step eval (`data/tasks_multistep.py` + `eval/eval_agent.py`): 1–3 step
+tasks anchored on `get_weather`'s fixed data (model MUST chain real tools), scored by whether the
+task got SOLVED. Added `agent/harmony.py` to run **gpt-oss** (OpenAI, harmony format) through the
+same eval. task_success (n=90):
+
+| model | active params | task_success | note |
+|---|---|---|---|
+| Qwen2.5-7B base | 7B | 0.90 | fails `f_rise`: won't call get_weather under implicit phrasing |
+| **Qwen2.5-7B + SFT** | **7B** | **1.00** | failure fixed; even self-recovers from a bad call |
+| Qwen2.5-14B | 14B | 0.989 | gap was mostly SIZE |
+| gpt-oss-20b | 3.6B (MoE) | 1.00 | matches 14B at ~1/4 active compute = MoE efficiency |
+
+**Two clean conclusions:** (a) the 7B-vs-20B gap was a *size* artifact — at matched total params
+(14B) Qwen ties gpt-oss; the real edge is gpt-oss's **MoE compute efficiency** (3.6B active). (b)
+**"specialization offsets scale" replicated in the agent regime** — SFT takes 7B from 0.90 → 1.00,
+matching models 2–3× larger, because SFT's transferable gain (Finding 2: selection/proactivity
+reliability) is exactly what multi-step success compounds on.
+
+**Honest bound:** the task saturates at the top (SFT-7B = 14B = gpt-oss = 1.0 just means all max out).
+The clean claim is base 0.90 → SFT 1.00. To *rank* the top performers, need **harder tasks** (longer
+chains, distractor tools, forced error-recovery, more ambiguous phrasing) — the obvious next step.
 
 ## Colab/Drive gotchas (these cost hours — heed them)
 - Runtime reset wipes BOTH `/content` AND pip-installed packages → re-run Cell 0 (reinstall + remount).
@@ -67,5 +91,16 @@ gold call over a plausible-but-wrong one. Code is in place (all on `main`):
   download to `/content` (local) → `cp` to Drive → delete local copy AND `~/.cache/huggingface`.
   For huge models (72B) only: download direct-to-Drive with `--max_workers 2` (throttle).
 - If local disk hits 0 / Drive mount fails: only fix is delete+recreate the runtime (Drive files survive).
+- **Loading a model FROM Drive (FUSE) stalls** for big ones (Llama-70B at 134G hung at 0/723). Copy
+  the model to local `/content` first (bulk sequential read is robust), then load from local.
+- **gpt-oss (MXFP4) loading**: needs `kernels>=0.12` + triton, but `kernels` was version-broken →
+  `pip uninstall -y kernels` + **restart** → transformers auto-dequantizes to bf16 (gpt-oss-20b ≈ 42G,
+  fine on a 96G card). gpt-oss tokenizer needs `tiktoken`. On ModelScope use HF id `openai/gpt-oss-20b`
+  via HuggingFace (NOT mirrored on ModelScope under that id — 404).
+- **After `pip install -U transformers` you MUST restart the runtime** or you get inconsistent
+  internal imports (e.g. `cannot import name GemmaQuantizationConfig`). Same for any core pkg.
+- Llama-3.3-70B on ModelScope = `LLM-Research/Llama-3.3-70B-Instruct` (ungated mirror). 70B dense must
+  load in 4-bit (`BitsAndBytesConfig`); bf16 (~140G) won't fit 96G. `pip uninstall -y torchao` still
+  needed before loading any LoRA adapter (peft torchao-version ImportError).
 - `pip uninstall -y torchao` — fixes peft LoRA `torchao` version ImportError.
 - `MsDataset.load` hits a datasets-version clash → prepare.py bypasses it by reading the raw json.

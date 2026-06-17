@@ -1,6 +1,6 @@
 # 🧠 项目交接记忆 · tool-agent-lab(中文)
 
-> 换对话时把这份发给我,或直接说"继续 tool-agent-lab,看 HANDOFF / HANDOFF.zh,下一步 SFT→DPO"。
+> 换对话时把这份发给我,或直接说"继续 tool-agent-lab,看 HANDOFF / HANDOFF.zh;主线已出三发现 capstone,下一步=加难多步 agent 任务在顶部分高下"。
 
 ## 一、背景与目标
 - **上一个项目** `tiny-llm-quant-ablation`(已完结):从零造小 LLM 做量化消融,核心发现"**量化代价在能力边缘才出现**";并亲历"单卡从零训练 = 玩具"的规模墙。
@@ -29,18 +29,35 @@
 - 数据:`sft_train.jsonl`(20k)、`sft_val.jsonl`(500);adapter:`sft-qwen7b`、`sft-qwen1.5b`
 - SFT 数据源:`AI-ModelScope/xlam-function-calling-60k`(`--source modelscope`,国内直连不门控)
 
-## 五、下一步(进行中):SFT 之上加 DPO · 对齐梯子
-**多模态/VisDrone-VL 那条线已放弃(2026-06-13)**,回归核心 LLM 主线。主线 = SFT → **DPO** →(数据配方 / OOD 泛化),继续精进工具调用模型的能力/对齐。
+## 五、结果:一条三发现的能力主线(2026-06-13)
+(多模态/VisDrone-VL 那条线已放弃,回归核心 LLM 主线。)把工具调用线从**单步 → OOD → 多步 agent** 推进,三个发现串成一个故事:**SFT 到底买到了什么。**
 
-SFT 的增益集中在**参数准确率**且有天花板;DPO 训模型在"金标调用 vs 似是而非的错误调用"里选金标。代码已就位(都在 `main`):
-- `data/build_prefs.py` —— 产 {prompt, chosen, rejected}。`--mode sampled`(**推荐**,on-policy:从 SFT 模型采样,留它**自己的错误**当 rejected,优先"工具名对/参数错"的硬负例)或 `--mode synthetic`(零依赖兜底:扰动金标参数)。**负例专打参数**。
-- `train/dpo_lora.py` —— TRL DPOTrainer;把 SFT 合进权重,于是 **SFT 模型既是 DPO 起点又是冻结参考**(ref_model=None + peft_config),DPO 学一个新 LoRA。
-- `eval/eval_toolcall.py` —— 加了 `--merge_adapter`(先把 SFT 烤进权重),于是 base / SFT / SFT+DPO 在同一验证集上同口径对比。`COLAB.md` 第 6–9 步跑完整闭环。
-- 本地用 stub 烟测过 synthetic 负例逻辑(硬负例:单位互换、丢参、数值偏移;全部可解析、只在参数上不同)。`sampled`/DPO 需在 Colab 跑(GPU+trl)。
-- **研究问题**:DPO 能否把 exact_acc 顶过 SFT?增益是不是落在**参数准确率**?注意过优化(LR 太高 / `--beta` 太低会把 json_valid 拉崩)。
-- **下次开跑**:建偏好对(`--mode sampled`,1.5B 和 7B)→ DPO → 出三段式对比表。
+### 发现 1 —— DPO 接 SFT:提升微小,因为单步任务饱和了
+建了完整 DPO 闭环(`build_prefs` on-policy/synthetic 偏好对;`dpo_lora` 用 SFT 模型当起点+冻结参考;`eval_toolcall --merge_adapter`)。结果(7B,n=300):exact_acc **0.883→0.890(+0.7,噪声内)**,全在参数上。教训:单步 xlam ≈0.88 **饱和**,测不动技术增益。*DPO 看着平的原因*:贪心解码吃掉了分布重塑;on-policy 负例只 542 个(SFT 在 82% prompt 上已全对);500 条验证集是地板。
+
+### 发现 2 —— OOD 泛化:SFT 可迁移的是"可靠性",不是参数
+在没训过的合成 8-tool zoo 上评。SFT *表面*掉(exact 0.933→0.820),但 `--show_errors` 显示 **20/20 是写法差异**(`Japanese→ja`、`3pm→15:00`),不是错值。拆解:SFT **强化且迁移了"选工具+格式可靠性"**(name/json→1.0),所谓"参数退步"只是约定漂移。结论:exact-match 部分测的是约定一致性而非能力 → 该用**执行式**评测。eval 加了 `arg_acc` 看这个。
+
+### 发现 3(capstone)—— 多步 agent:可靠性连乘,微调 7B 打平 frontier
+建了执行式多步评测(`tasks_multistep` + `eval_agent`):1–3 步任务锚在 `get_weather` 假数据上(必须真调工具链),按**任务办成没**打分。加 `agent/harmony.py` 让 **gpt-oss**(OpenAI,harmony 格式)走同一套评测。task_success(n=90):
+
+| 模型 | 激活参数 | task_success | 备注 |
+|---|---|---|---|
+| Qwen2.5-7B base | 7B | 0.90 | `f_rise` 隐晦措辞下不主动调 get_weather |
+| **Qwen2.5-7B + SFT** | **7B** | **1.00** | 毛病修好,还会从错误调用里自恢复 |
+| Qwen2.5-14B | 14B | 0.989 | 差距主要是**尺寸** |
+| gpt-oss-20b | 3.6B(MoE) | 1.00 | 用约 1/4 激活算力打平 14B = MoE 效率 |
+
+**两个干净结论:**(a) 7b-vs-20b 的差是**尺寸**假象 —— 总参对齐(14B)就追平;gpt-oss 真正的优势是 **MoE 算力效率**(3.6B 激活)。(b) **"专精可抵规模"在 agent 域复刻** —— SFT 把 7B 从 0.90 拉到 1.00,打平 2–3 倍大的模型,因为 SFT 可迁移的增益(发现 2:选工具/主动性可靠性)正是多步成功所连乘的东西。
+
+**诚实边界**:任务在顶部饱和(SFT-7B=14B=gpt-oss=1.0 只是都顶到天花板)。能立的强 claim 是 base 0.90→SFT 1.00。要在顶部**排名**,得**加难任务**(长链/干扰工具/强制错误恢复/更隐晦措辞)—— 显而易见的下一步。
 
 ## 六、Colab/Drive 关键坑(切记)
 - 运行时重置会清空 **/content + pip 包** → 重跑 Cell 0(重装 + 重挂 Drive);只有 **/content/drive 持久**。
 - 下模型到 Drive:**别让 `local_dir` 直指 Drive**(双重缓存撑爆本地 ~235GB 盘 → Drive I/O 错 / 挂载失败)。正确姿势:**下到 /content → cp 到 Drive → 删本地 + 删 `~/.cache/huggingface`**;72B 这种超大才用 `--max_workers 2` 限速直写 Drive。盘满 / 挂载死 → 只能删除并重建运行时(Drive 文件不丢)。
-- `pip uninstall -y torchao`(修 peft LoRA 报错);`MsDataset.load` 有版本冲突 → prepare.py 改为直接读 json。
+- `pip uninstall -y torchao`(修 peft LoRA 报错;**加任何 adapter 前都要先卸**);`MsDataset.load` 有版本冲突 → prepare.py 改为直接读 json。
+- **从 Drive(FUSE)加载大模型会卡死**(Llama-70B 134G 卡在 0/723)→ 先 `cp` 到本地 `/content` 再加载(顺序读稳)。
+- **gpt-oss(MXFP4)加载**:要 `kernels>=0.12`+triton,但 `kernels` 版本坏了 → `pip uninstall -y kernels`+**重启** → transformers 自动反量化成 bf16(gpt-oss-20b ≈42G,96G 卡无压力)。分词器要 `tiktoken`。下载用 HF 的 `openai/gpt-oss-20b`(ModelScope 没这个 id,404)。
+- **`pip install -U transformers` 后必须重启运行时**,否则内部 import 自相矛盾(如 `cannot import name GemmaQuantizationConfig`)。任何核心包升级同理。
+- Llama-3.3-70B 的 ModelScope id = `LLM-Research/Llama-3.3-70B-Instruct`(免门控镜像)。70B dense 必须 4-bit 加载(`BitsAndBytesConfig`),bf16(~140G)装不下 96G。
+- 这次环境是 **Colab 的 Blackwell 卡(RTX PRO 6000, 96G)**,sm_120;MXFP4/bnb 在 Blackwell 上偶有内核问题,bf16 反量化是稳妥退路。
