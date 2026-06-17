@@ -67,6 +67,21 @@ def get_weather(city: str):
     return {"city": city, **rec}
 
 
+# fixed, unguessable city populations (millions) — for multi-tool / distractor tasks
+_POPULATION = {
+    "london": 8.9, "tokyo": 13.9, "new york": 8.3, "beijing": 21.5,
+    "paris": 2.1, "berlin": 3.7, "cairo": 9.8, "sydney": 5.3,
+}
+
+
+def get_population(city: str):
+    """Look up a city's population in millions (fixed demo data)."""
+    rec = _POPULATION.get(city.strip().lower())
+    if rec is None:
+        return {"error": f"no data for '{city}'", "known": sorted(_POPULATION)}
+    return {"city": city, "population_millions": rec}
+
+
 def convert_units(value: float, from_unit: str, to_unit: str):
     """Convert between a few common units (length / temperature)."""
     f, t = from_unit.lower(), to_unit.lower()
@@ -108,6 +123,14 @@ REGISTRY = {
         "fn": get_weather,
         "schema": _schema(
             "get_weather", "Get the current weather for a city.",
+            {"city": {"type": "string", "description": "city name, e.g. 'Tokyo'"}},
+            ["city"],
+        ),
+    },
+    "get_population": {
+        "fn": get_population,
+        "schema": _schema(
+            "get_population", "Get a city's population in millions.",
             {"city": {"type": "string", "description": "city name, e.g. 'Tokyo'"}},
             ["city"],
         ),
