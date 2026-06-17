@@ -73,15 +73,34 @@ same eval. task_success (n=90):
 | Qwen2.5-14B | 14B | 0.989 | gap was mostly SIZE |
 | gpt-oss-20b | 3.6B (MoE) | 1.00 | matches 14B at ~1/4 active compute = MoE efficiency |
 
-**Two clean conclusions:** (a) the 7B-vs-20B gap was a *size* artifact — at matched total params
-(14B) Qwen ties gpt-oss; the real edge is gpt-oss's **MoE compute efficiency** (3.6B active). (b)
-**"specialization offsets scale" replicated in the agent regime** — SFT takes 7B from 0.90 → 1.00,
-matching models 2–3× larger, because SFT's transferable gain (Finding 2: selection/proactivity
-reliability) is exactly what multi-step success compounds on.
+On the easy set everything strong saturates (SFT-7B = 14B = gpt-oss = 1.0), so we added a **HARD set**
+(`generate(hard=True)`: 3–5 step chains + a `get_population` distractor tool + comparison logic) that
+desaturates and *ranks* the field (n=90):
 
-**Honest bound:** the task saturates at the top (SFT-7B = 14B = gpt-oss = 1.0 just means all max out).
-The clean claim is base 0.90 → SFT 1.00. To *rank* the top performers, need **harder tasks** (longer
-chains, distractor tools, forced error-recovery, more ambiguous phrasing) — the obvious next step.
+| model | active params | EASY | HARD | hard 4-step | hard 5-step |
+|---|---|---|---|---|---|
+| Qwen2.5-7B base | 7B | 0.90 | 0.644 | 0.40 | 0.53 |
+| Qwen2.5-7B + SFT | 7B | 1.00 | 0.778 | 0.90 | 0.50 |
+| Qwen2.5-14B | 14B | 0.99 | 0.856 | 0.80 | 0.77 |
+| **gpt-oss-20b** | **3.6B (MoE)** | 1.00 | **0.967** | **1.00** | **0.90** |
+
+**Three clean, mechanistic conclusions:**
+1. **A reliability/depth wall is real** — dense models collapse on the longest chains (5-step: base
+   0.53, SFT 0.50, 14B 0.77), because per-step errors compound (p^N).
+2. **"Specialization offsets scale" — but only PARTIALLY.** SFT takes 7B from 0.644 → 0.778 (≈38% of
+   the gap to 14B) and *matches* big-model reliability at medium depth (4-step 0.40 → 0.90), but the
+   deepest chains (5-step) expose a limit fine-tuning doesn't fix and scale does. The easy-set tie
+   (SFT-7B = 14B = 1.0) was a saturation artifact.
+3. **The headline is EFFICIENCY, and it's largest where it's hardest.** gpt-oss-20b (only **3.6B
+   active**) *tops* the hard ranking — 4-step perfect, 5-step 0.90 — beating dense Qwen-14B at ~1/4
+   the per-token compute. The depth wall that stops dense models barely touches the MoE+reasoning
+   model. Best long-chain agent reliability per unit of active compute.
+
+The whole arc connects: DPO marginal (saturated) → OOD shows SFT's real transferable gain is
+*reliability* not arguments → multi-step shows that reliability *compounds* → hard tasks rank
+specialization vs scale vs (MoE) efficiency. **Next options:** error-analyze SFT-7B's 5-step failures
+(what breaks at depth 5?); or add forced error-recovery / ambiguous-phrasing task families; or stop
+here — the story is complete and bounded.
 
 ## Colab/Drive gotchas (these cost hours — heed them)
 - Runtime reset wipes BOTH `/content` AND pip-installed packages → re-run Cell 0 (reinstall + remount).
