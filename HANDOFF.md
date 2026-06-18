@@ -82,7 +82,8 @@ desaturates and *ranks* the field (n=90):
 | Qwen2.5-7B base | 7B | 0.90 | 0.644 | 0.40 | 0.53 |
 | Qwen2.5-7B + SFT | 7B | 1.00 | 0.778 | 0.90 | 0.50 |
 | Qwen2.5-14B | 14B | 0.99 | 0.856 | 0.80 | 0.77 |
-| **gpt-oss-20b** | **3.6B (MoE)** | 1.00 | **0.967** | **1.00** | **0.90** |
+| **gpt-oss-20b** | **3.6B (MoE)** | 1.00 | **0.967** | 1.00 | 0.90 |
+| **Qwen3.6-35B-A3B** | **3B (MoE)** | 1.00 | **0.944** | 0.83 | **1.00** |
 
 **Three clean, mechanistic conclusions:**
 1. **A reliability/depth wall is real** — dense models collapse on the longest chains (5-step: base
@@ -91,10 +92,13 @@ desaturates and *ranks* the field (n=90):
    the gap to 14B) and *matches* big-model reliability at medium depth (4-step 0.40 → 0.90), but the
    deepest chains (5-step) expose a limit fine-tuning doesn't fix and scale does. The easy-set tie
    (SFT-7B = 14B = 1.0) was a saturation artifact.
-3. **The headline is EFFICIENCY, and it's largest where it's hardest.** gpt-oss-20b (only **3.6B
-   active**) *tops* the hard ranking — 4-step perfect, 5-step 0.90 — beating dense Qwen-14B at ~1/4
-   the per-token compute. The depth wall that stops dense models barely touches the MoE+reasoning
-   model. Best long-chain agent reliability per unit of active compute.
+3. **The headline is EFFICIENCY, and it's ARCHITECTURAL, not a single model.** BOTH ~3B-active MoE
+   models — gpt-oss-20b (3.6B active, 0.967) and current-gen Qwen3.6-35B-A3B (3B active, 0.944) —
+   top the hard ranking and **clear the 5-step depth wall** (0.90 / 1.00) that stops every dense
+   model (≤0.77, incl. 14B), at ~1/4 the per-token compute. Two independent families (OpenAI,
+   Alibaba) replicate it → **the depth/reliability wall is a DENSE-architecture limit; sparse-MoE +
+   reasoning breaks it with only ~3B active params.** Best long-chain agent reliability per unit of
+   active compute is an architecture story, not a "which vendor" story.
 
 The whole arc connects: DPO marginal (saturated) → OOD shows SFT's real transferable gain is
 *reliability* not arguments → multi-step shows that reliability *compounds* → hard tasks rank
@@ -121,5 +125,14 @@ here — the story is complete and bounded.
 - Llama-3.3-70B on ModelScope = `LLM-Research/Llama-3.3-70B-Instruct` (ungated mirror). 70B dense must
   load in 4-bit (`BitsAndBytesConfig`); bf16 (~140G) won't fit 96G. `pip uninstall -y torchao` still
   needed before loading any LoRA adapter (peft torchao-version ImportError).
+- **Qwen3.6 changed its tool-call format** from Qwen2.5's Hermes JSON (`<tool_call>{json}</tool_call>`)
+  to an XML style: `<tool_call><function=NAME><parameter=KEY>VALUE</parameter></function></tool_call>`.
+  Parse with that regex and COERCE param values (they're all strings → `json.loads` each, fall back to
+  string) or numeric args break. Id `Qwen/Qwen3.6-35B-A3B` (Apache-2.0, HF+ModelScope). On Colab
+  (open internet) HuggingFace + `HF_HUB_ENABLE_HF_TRANSFER=1` is far faster than ModelScope; use
+  ModelScope only behind the GFW.
+- **`from_pretrained(<local path>)` raising "Repo id must be in the form ..."** means the path lacks
+  `config.json` (or Drive isn't mounted) so transformers treats it as an online repo id. Mount Drive /
+  fix the path.
 - `pip uninstall -y torchao` — fixes peft LoRA `torchao` version ImportError.
 - `MsDataset.load` hits a datasets-version clash → prepare.py bypasses it by reading the raw json.
