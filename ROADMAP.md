@@ -26,8 +26,12 @@ Legend: ✅ done · 🟡 partial / touched · 🔴 gap
 
 ### Capabilities / behaviors
 - ✅ **Tool use / agents** — execution-scored multi-step eval (this repo)
-- 🔴 **Reasoning / test-time compute / self-correction** — only *observed* (gpt-oss
-  reasoning); **next breadth rep targets this**
+- ✅ **Reasoning / test-time compute / self-correction** — built a verify-and-revise
+  pass (`Agent.run(self_check=True)`). Finding: on small tool-agents, test-time
+  self-correction and SFT are *substitutes* for the metacognitive ("didn't-check")
+  failure mode — a second pass lifts base-7B +15.6pt (≈ matching SFT) but adds
+  almost nothing on top of SFT (+2pt, redundant); near-zero over-correction
+  (tool-grounded feedback); both bottom out at a shared ~20% capability floor.
 - ✅ **Multimodal / VLM** — VLM auto-annotator, "tokens-not-pixels"
 - 🔴 **RAG / retrieval**
 
