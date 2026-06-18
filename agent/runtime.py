@@ -64,7 +64,8 @@ class Agent:
         self.tools = tool_schemas()
 
     @torch.no_grad()
-    def _generate(self, messages, max_new_tokens=512):
+    def _generate(self, messages, max_new_tokens=1024):   # 1024 to match the gpt-oss/Qwen3.6
+                                                          # loops; 512 truncated verbose 5-step finals
         text = self.tokenizer.apply_chat_template(
             messages, tools=self.tools, add_generation_prompt=True, tokenize=False)
         inputs = self.tokenizer(text, return_tensors="pt").to(self.device)
@@ -73,7 +74,8 @@ class Agent:
         gen = out[0, inputs["input_ids"].shape[1]:]
         return self.tokenizer.decode(gen, skip_special_tokens=True)
 
-    def run(self, query, max_steps=5, verbose=True, system=SYSTEM_PROMPT, self_check=False):
+    def run(self, query, max_steps=5, verbose=True, system=SYSTEM_PROMPT, self_check=False,
+            max_new_tokens=1024):
         """Run the full agentic loop on a user query. Returns (final_text, trace).
 
         self_check=True adds one verify-and-revise turn: when the model first
@@ -85,7 +87,7 @@ class Agent:
         trace = []
         checked = False
         for step in range(max_steps):
-            out = self._generate(messages)
+            out = self._generate(messages, max_new_tokens)
             calls = parse_tool_calls(out)
             if not calls:                              # no tool -> final answer
                 messages.append({"role": "assistant", "content": out})
