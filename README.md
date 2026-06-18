@@ -26,6 +26,38 @@ user ─▶ model ─▶ <tool_call>{...}</tool_call> ─▶ execute ─▶ resu
 The loop is [`agent/runtime.py`](agent/runtime.py); it drives any HF chat model
 with tool support (default **Qwen2.5-1.5B-Instruct**, Apache-2.0, not gated).
 
+## Results so far
+
+A capability arc from single-call → OOD → multi-step agent (full write-up in
+[`HANDOFF.md`](HANDOFF.md)):
+
+1. **DPO on top of SFT is marginal** — single-call tool accuracy saturates (~0.88),
+   so it can't measure the gain. *Lesson: pick a metric with headroom.*
+2. **What SFT actually transfers is RELIABILITY, not arguments** — on unseen (OOD)
+   tools, SFT's apparent "argument regression" is cosmetic re-serialization
+   (`Japanese`→`ja`); what genuinely transfers is tool-selection + format
+   reliability. *Lesson: exact-match partly scores convention, not capability →
+   evaluate by execution.*
+3. **That reliability compounds, and it's an architecture story.** Execution-scored
+   multi-step agent eval ([`eval/eval_agent.py`](eval/eval_agent.py)) on hard
+   3–5-step tasks:
+
+   | model | active params | task_success (hard) | 5-step |
+   |---|---|---|---|
+   | Qwen2.5-7B base | 7B | 0.64 | 0.53 |
+   | Qwen2.5-7B + SFT | 7B | 0.78 | 0.50 |
+   | Qwen2.5-14B | 14B | 0.86 | 0.77 |
+   | gpt-oss-20b | 3.6B (MoE) | 0.97 | 0.90 |
+   | Qwen3.6-35B-A3B | 3B (MoE) | 0.94 | **1.00** |
+
+   SFT takes a 7B from 0.64 → 0.78 ("specialization offsets scale" — but only
+   *partially*; the deepest chains still need scale). And **both ~3B-active MoE
+   models clear the 5-step depth wall that stops every dense model** (≤0.77) at
+   ~1/4 the per-token compute — replicated across two vendors (OpenAI, Alibaba).
+   *The reliability/depth wall is a dense-architecture limit; sparse MoE +
+   reasoning breaks it.* Cross-model loops: [`agent/harmony.py`](agent/harmony.py)
+   (gpt-oss), [`agent/qwen36.py`](agent/qwen36.py) (Qwen3.6's XML tool format).
+
 ## Research question
 
 > **How do you turn a base model into a *reliable* agent — and what actually
