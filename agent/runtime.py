@@ -25,6 +25,11 @@ SYSTEM_PROMPT = (
     "You are a helpful assistant with access to tools. When a tool is needed, "
     "call it; otherwise answer directly. Use tool results to give a final answer."
 )
+VERIFY_PROMPT = (
+    "Before finalizing, double-check your work step by step: re-verify each tool "
+    "result you used and re-compute the final value. If anything is wrong, call the "
+    "tools again to fix it. Then state your final answer."
+)
 
 _TOOL_CALL_RE = re.compile(r"<tool_call>\s*(\{.*?\})\s*</tool_call>", re.DOTALL)
 
@@ -68,16 +73,28 @@ class Agent:
         gen = out[0, inputs["input_ids"].shape[1]:]
         return self.tokenizer.decode(gen, skip_special_tokens=True)
 
-    def run(self, query, max_steps=5, verbose=True, system=SYSTEM_PROMPT):
-        """Run the full agentic loop on a user query. Returns (final_text, trace)."""
+    def run(self, query, max_steps=5, verbose=True, system=SYSTEM_PROMPT, self_check=False):
+        """Run the full agentic loop on a user query. Returns (final_text, trace).
+
+        self_check=True adds one verify-and-revise turn: when the model first
+        produces a final answer, it's asked to re-check each tool result and the
+        final number (and may call tools again) before committing. A cheap test-
+        time-compute lever — does it break the p^N depth wall, or over-correct?"""
         messages = [{"role": "system", "content": system},
                     {"role": "user", "content": query}]
         trace = []
+        checked = False
         for step in range(max_steps):
             out = self._generate(messages)
             calls = parse_tool_calls(out)
             if not calls:                              # no tool -> final answer
                 messages.append({"role": "assistant", "content": out})
+                if self_check and not checked:         # one verify-and-revise pass
+                    checked = True
+                    messages.append({"role": "user", "content": VERIFY_PROMPT})
+                    if verbose:
+                        print("[self-check] re-verifying…")
+                    continue
                 if verbose:
                     print(f"[final] {out.strip()}")
                 return out.strip(), trace
