@@ -1,0 +1,12 @@
+dataset:
+  source: synthetic                          # synthetic | modelscope | hf
+  source_dataset: AI-ModelScope/xlam-function-calling-60k
+  train_manifest: data/train_manifest.txt
+  validation_manifest: data/validation_manifest.txt
+  train_data: data/sft_train.jsonl
+  validation_data: data/sft_val.jsonl
+  prepare:
+    n_train: 20000
+    n_val: 500
+    turn_end: "<|im_end|>"
+  excluded: []

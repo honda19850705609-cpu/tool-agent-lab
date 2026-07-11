@@ -1,11 +1,30 @@
 __pycache__/
 *.py[cod]
 .ipynb_checkpoints/
+.DS_Store
+.venv/
+.cache/
+*.egg-info/
+
+# generated model weights / checkpoints
 *.pt
 *.bin
 *.safetensors
 outputs/
 ckpt*/
 wandb/
-.DS_Store
+
+# generated data splits (rebuilt by tool_agent_lab.data.prepare)
 data/*.jsonl
+!data/README.md
+!data/*.txt
+
+# phase artifacts: ignore contents, keep the directory READMEs
+phase*_*/logs/*
+!phase*_*/logs/README.md
+phase*_*/runs/*
+!phase*_*/runs/README.md
+phase*_*/weights/*
+!phase*_*/weights/README.md
+phase*_*/results/*
+!phase*_*/results/README.md

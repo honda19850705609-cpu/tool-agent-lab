@@ -1,0 +1,4 @@
+# Validation split manifest - one absolute path per non-comment line.
+# Locally:  data/sft_val.jsonl
+# On Colab: /content/drive/MyDrive/Model/tool-agent-lab/sft_val.jsonl
+data/sft_val.jsonl

@@ -2,6 +2,15 @@
 
 Status snapshot of `tool-agent-lab` so work can resume cleanly.
 
+> **Repo reorganized to config-first layout (2026-07).** Code now lives in a
+> shared `tool_agent_lab/` package + three phase dirs (`phase0_sft`,
+> `phase1_dpo`, `phase2_multistep_agent`), each with `train.py` + `configs/`.
+> Old `agent/ data/ train/ eval/` module paths below are historical; map them as:
+> `agent/runtime.py`->`tool_agent_lab/agent.py`, `agent/tools.py`->`tool_agent_lab/tools.py`,
+> `data/prepare.py`->`tool_agent_lab/data/prepare.py`, `train/sft_lora.py`->`phase0_sft/tools/sft.py`,
+> `train/dpo_lora.py`->`phase1_dpo/tools/dpo.py`, `eval/eval_toolcall.py`->`phase0_sft/tools/eval_toolcall.py`,
+> `eval/eval_agent.py`->`phase2_multistep_agent/tools/eval_agent.py`. See README.md / COLAB.md.
+
 ## Project
 Fine-tune an open base model into a **functional tool-calling agent**, and study
 **capability/alignment** (SFT / data recipes / DPO). Sequel to a from-scratch LLM

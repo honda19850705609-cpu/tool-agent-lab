@@ -1,0 +1,29 @@
+experiment:
+  name: sft_qwen7b
+  phase: phase0_sft
+  stage: sft              # sft | eval_toolcall
+  seed: 11
+  device: auto
+  run_root: runs
+  log_root: logs
+
+config_files:
+  model: configs/model.yaml
+  data: configs/data.yaml
+
+optimization:
+  epochs: 1.0
+  batch_size: 8
+  grad_accum: 2
+  learning_rate: 0.0002
+  warmup_ratio: 0.03
+  lr_scheduler: cosine
+  max_len: 2048
+  save_strategy: epoch
+  bf16: true
+  gradient_checkpointing: true
+
+eval:
+  n: 300
+  max_new: 256
+  show_errors: 0

@@ -2,6 +2,8 @@
 torch
 transformers>=4.45
 accelerate
+# config-first infrastructure
+PyYAML>=6.0
 # fine-tuning
 peft
 trl>=0.11

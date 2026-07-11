@@ -1,0 +1,4 @@
+dataset:
+  eval_tasks: data/multistep_eval.jsonl           # easy set (1-3 step)
+  eval_tasks_hard: data/multistep_eval_hard.jsonl # hard set (3-5 step + distractor)
+  excluded: []

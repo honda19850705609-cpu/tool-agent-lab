@@ -1,0 +1,5 @@
+dataset:
+  sft_data: data/sft_train.jsonl        # {prompt, completion} to draw prompts + gold from
+  prefs_data: data/dpo_train.jsonl      # {prompt, chosen, rejected} written by build_prefs
+  turn_end: "<|im_end|>"
+  excluded: []

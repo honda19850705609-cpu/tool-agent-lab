@@ -1,0 +1,21 @@
+experiment:
+  name: multistep_agent
+  phase: phase2_multistep_agent
+  stage: eval_agent       # tasks | eval_agent
+  seed: 11
+  device: auto
+  run_root: runs
+  log_root: logs
+
+config_files:
+  model: configs/model.yaml
+  data: configs/data.yaml
+
+tasks:
+  n: 180
+  hard: true
+  seed: 0
+
+eval:
+  n: 90
+  max_steps: 5

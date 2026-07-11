@@ -1,0 +1,4 @@
+# Training split manifest - one absolute path per non-comment line.
+# Locally:  data/sft_train.jsonl
+# On Colab: /content/drive/MyDrive/Model/tool-agent-lab/sft_train.jsonl
+data/sft_train.jsonl

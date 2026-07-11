@@ -1,0 +1,19 @@
+base_model:
+  id: Qwen/Qwen2.5-7B-Instruct      # on Colab: /content/drive/MyDrive/Model/tool-agent-lab/Qwen2.5-7B-Instruct
+  dtype: bfloat16
+  device_map: auto
+
+lora:
+  r: 16
+  alpha: 32
+  dropout: 0.05
+  bias: none
+  task_type: CAUSAL_LM
+  target_modules:
+    - q_proj
+    - k_proj
+    - v_proj
+    - o_proj
+    - gate_proj
+    - up_proj
+    - down_proj

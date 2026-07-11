@@ -1,0 +1,34 @@
+experiment:
+  name: dpo_qwen7b
+  phase: phase1_dpo
+  stage: dpo              # build_prefs | dpo
+  seed: 11
+  device: auto
+  run_root: runs
+  log_root: logs
+
+config_files:
+  model: configs/model.yaml
+  data: configs/data.yaml
+
+optimization:
+  epochs: 1.0
+  batch_size: 2
+  grad_accum: 8
+  learning_rate: 0.000005   # DPO wants a much smaller LR than SFT
+  beta: 0.1                 # KL strength; lower = trust preferences more
+  warmup_ratio: 0.05
+  lr_scheduler: cosine
+  max_len: 2048
+  max_prompt_len: 1600
+  save_strategy: epoch
+  bf16: true
+  gradient_checkpointing: true
+
+prefs:
+  mode: sampled             # sampled (on-policy, needs SFT model + GPU) | synthetic
+  n: 3000
+  k: 4                      # samples per prompt
+  temperature: 0.8
+  max_new: 256
+  fallback_synthetic: false # backfill a synthetic negative when SFT is already correct

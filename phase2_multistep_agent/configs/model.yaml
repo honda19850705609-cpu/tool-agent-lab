@@ -1,0 +1,9 @@
+base_model:
+  id: Qwen/Qwen2.5-7B-Instruct
+  dtype: bfloat16
+  device_map: auto
+
+# Multi-step eval compares many models (7B/14B/32B/72B/MoE) and stages
+# (base/SFT/DPO). Override --model / --adapter / --merge_adapter per run; this
+# default is just the anchor. For gpt-oss use tool_agent_lab.harmony; for
+# Qwen3.6 use tool_agent_lab.qwen36 (their tool-call formats differ).

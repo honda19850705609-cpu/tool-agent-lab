@@ -2,6 +2,8 @@
 
 > 换对话时把这份发给我,或直接说"继续 tool-agent-lab,看 HANDOFF / HANDOFF.zh;主线已出三发现 capstone,下一步=加难多步 agent 任务在顶部分高下"。
 
+> **仓库已重组为配置优先结构(2026-07)。** 代码移入共享包 `tool_agent_lab/` + 三个阶段目录(`phase0_sft`/`phase1_dpo`/`phase2_multistep_agent`),每个阶段有 `train.py` + `configs/`。下方旧路径(`agent/`、`data/`、`train/`、`eval/`)为历史记录,映射见 README.md / COLAB.md。
+
 ## 一、背景与目标
 - **上一个项目** `tiny-llm-quant-ablation`(已完结):从零造小 LLM 做量化消融,核心发现"**量化代价在能力边缘才出现**";并亲历"单卡从零训练 = 玩具"的规模墙。
 - **当前项目** `tool-agent-lab`(GitHub: honda19850705609-cpu/tool-agent-lab):**微调开源基座 → 做一个能用的工具调用 agent**,研究方向 = **能力/对齐**(SFT / 数据配方 / DPO)。在 **Colab Pro+**(A100/H100/L4,高内存)上跑。
